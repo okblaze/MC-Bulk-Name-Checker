@@ -5,9 +5,9 @@ Very simple python script. Opens a terminal in which you can check the availabil
 
 Files containing usernames should use this format:
 
-username1
-username2
-username3
+#username1
+#username2
+#username3
 
 
 

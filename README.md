@@ -1,4 +1,5 @@
 # MC-Bulk-Name-Checker
+(this is my very first time uploading something to github so I don't know what i'm doing at all)
 Very simple python script. Opens a terminal in which you can check the availability of minecraft usernames in bulk. An UI version may come out at some point.
 
 

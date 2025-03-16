@@ -2,12 +2,10 @@
 Very simple python script. Opens a terminal in which you can check the availability of minecraft usernames in bulk. An UI version may come out at some point.
 
 
-
 Files containing usernames should use this format:
-
--username
--username
--username
+username
+username
+username
 
 
 If you experience any issues, have any questions or feedback for this tool, please message me on discord.

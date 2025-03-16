@@ -5,26 +5,34 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore, Style, init
 import threading
+import random  # Import random for jitter
+import keyboard  # Import keyboard for detecting key presses
+import win32gui  # Import win32gui to check for window focus
+import ctypes  # Import ctypes to get console window handle
 
 # Initialize colorama for Windows compatibility
 init(autoreset=True)
 
 # Constants
 MOJANG_API_URL = "https://api.mojang.com/users/profiles/minecraft/"
-SLEEP_DURATION = 1  # seconds
-MAX_RETRIES = 3  # Retry limit for rate-limiting
+SLEEP_DURATION = 1.3  # Set sleep duration to 2.0 seconds to avoid rate-limiting
+MAX_RETRIES = 10  # Retry limit for rate-limiting
 SAFE_DIRECTORY = os.path.abspath("user_files")  # Trusted directory for files
-THREAD_POOL_SIZE = 5  # Limit concurrent threads
+THREAD_POOL_SIZE = 1  # Limit concurrent threads to 1 to ensure delay between requests
 
-# Logging setup with the new format
+# Logging setup with the format
 logging.basicConfig(filename="username_check.log", level=logging.INFO, format="%(message)s")
 
 # Semaphore for rate-limiting
 rate_limiter = threading.Semaphore(THREAD_POOL_SIZE)
 available_names_lock = threading.Lock()
 
+# Flag to stop the process
+stop_process = threading.Event()
+
 def sanitize_filename(input_filename):
-    safe_path = os.path.abspath(os.path.join(SAFE_DIRECTORY, input_filename))
+    safe_filename = os.path.basename(input_filename)
+    safe_path = os.path.abspath(os.path.join(SAFE_DIRECTORY, safe_filename))
     if not safe_path.startswith(SAFE_DIRECTORY):
         raise ValueError("Invalid file path. Directory traversal attempt detected!")
     return safe_path
@@ -64,6 +72,8 @@ def get_usernames_manually():
 def check_username(session, username):
     url = f"{MOJANG_API_URL}{username}"
     for attempt in range(1, MAX_RETRIES + 1):
+        if stop_process.is_set():
+            return f"{Fore.YELLOW}Process stopped by user.{Style.RESET_ALL}"
         try:
             with rate_limiter:
                 start_time = time.time()
@@ -79,15 +89,15 @@ def check_username(session, username):
                 logging.info(f"{log_entry}\n>> Username is available")
                 return f"{Fore.GREEN}{username} is AVAILABLE{Style.RESET_ALL}"
             elif response.status_code == 429:
-                wait_time = SLEEP_DURATION * attempt
-                print(f"{Fore.YELLOW}Rate-limited! Retrying in {wait_time} seconds...{Style.RESET_ALL}")
-                time.sleep(wait_time)
+                print(f"{Fore.YELLOW}Rate-limited! Retrying...{Style.RESET_ALL}")
             else:
                 logging.warning(f"{log_entry}\n>> Unexpected response: {response.status_code}")
                 return f"{Fore.YELLOW}Unexpected response for {username} ({response.status_code}){Style.RESET_ALL}"
         except requests.RequestException as e:
             logging.error(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - Error checking {username}: {e}")
             return f"{Fore.YELLOW}Error checking {username}: {e}{Style.RESET_ALL}"
+
+        time.sleep(SLEEP_DURATION)  # Add delay between each retry attempt
 
     logging.warning(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - Failed to check {username} after multiple attempts")
     return f"{Fore.YELLOW}Failed to check {username} after multiple attempts{Style.RESET_ALL}"
@@ -108,13 +118,14 @@ def save_available_usernames(available_names):
         print(f"{Fore.RED}Error writing to file: {e}{Style.RESET_ALL}")
 
 def main():
-    print(f"{Fore.CYAN}MCNameChecker - Developed by -blaze.{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}MC BulkNameChecker - Developed by -blaze.{Style.RESET_ALL}")
     print(f"If you have any questions/suggestions/need help with anything, message me on Discord @ vichonder.\n")
     
     while True:
         print(f"{Fore.YELLOW}Press 1 for Manual Username Checking.{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}Press 2 for File Name Checking.{Style.RESET_ALL}")
-        
+        print(f"Press P to stop the process at any point.\n")
+
         choice = input("\nEnter your choice (1 or 2): ").strip()
         
         if choice == "1":
@@ -133,6 +144,9 @@ def main():
                 total_usernames = len(usernames)
                 processed_count = 0
                 for future in as_completed(futures):
+                    if stop_process.is_set():
+                        print(f"{Fore.YELLOW}Process stopped by user.{Style.RESET_ALL}")
+                        break
                     result = future.result()
                     print(result)
                     if "AVAILABLE" in result:
@@ -140,7 +154,7 @@ def main():
                             available_names.append(futures[future])
                     processed_count += 1
                     print(f"{Fore.CYAN}Processing... {processed_count}/{total_usernames} usernames checked.{Style.RESET_ALL}")
-                    time.sleep(SLEEP_DURATION)
+                    time.sleep(SLEEP_DURATION)  # Add delay between each username check
 
         if available_names:
             save_available_usernames(available_names)
@@ -158,4 +172,18 @@ def main():
                 print(f"{Fore.RED}Invalid choice! Enter Y or N.{Style.RESET_ALL}")
 
 if __name__ == "__main__":
+    # Start a thread to listen for the 'P' key press
+    def listen_for_stop():
+        console_window = ctypes.windll.kernel32.GetConsoleWindow()
+        while True:
+            # Check if the current window is in focus
+            if win32gui.GetForegroundWindow() == console_window:
+                if keyboard.is_pressed('p'):
+                    stop_process.set()
+                    print(f"{Fore.YELLOW}Stopping process...{Style.RESET_ALL}")
+                    break
+
+    stop_thread = threading.Thread(target=listen_for_stop, daemon=True)
+    stop_thread.start()
+
     main()

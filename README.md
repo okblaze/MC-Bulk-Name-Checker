@@ -9,7 +9,7 @@ username1
 username2
 username3
 
-------------------------------------------------------
+
 
 If you experience any issues, have any questions or feedback for this tool, please message me on discord.
                                                                                                  vichonder
